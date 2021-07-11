@@ -5,6 +5,7 @@ const latMin = searchParams.get('latMin')
 const latMax = searchParams.get('latMax')
 const lonMin = searchParams.get('lonMin')
 const lonMax = searchParams.get('lonMax')
+const maxHeight = searchParams.get('maxHeight')//measured in feet
 console.log({latMin, latMax, lonMin, lonMax})
 
 Notification.requestPermission().then((result) => {
@@ -21,7 +22,7 @@ wqi = async function(...args) {
 	let crafts = result.aircraft.filter(craft =>
 		craft != undefined && craft.alt_baro != undefined && craft.alt_baro != "ground" && craft.lat != undefined && craft.lon != undefined
 	).map(craft => ({
-		alt_baro: craft.alt_baro,
+		height: craft.alt_baro, //in feet
 		lat: craft.lat,
 		lon: craft.lon,
 		registration: craft.r,
@@ -32,6 +33,11 @@ wqi = async function(...args) {
 	crafts = crafts.filter(craft =>
 		craft.lat > latMin && craft.lat < latMax && craft.lon > lonMin && craft.lon < lonMax
 	)
+	if (maxHeight != null) {
+		crafts = crafts.filter(craft =>
+			craft.height <= maxHeight
+		)
+	}
 	//TODO add direction and hight filtering
 	crafts = crafts.filter(craft =>
 		!seenHexes.includes(craft.hex)
