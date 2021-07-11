@@ -58,7 +58,10 @@ async function processNewCraft(craft) {
 		let text = await geocode(startPoint[0], startPoint[1])
 		text = `${prefix} ${text}`
 		console.log(text)
-		new Notification('ADS-B Exchange', { body: text })
+		new Notification('ADS-B Exchange', {
+			body: text,
+			requireInteraction: true
+		})
 	} catch (e) {
 		console.error(e)
 		console.log(`${prefix} [error getting location info, see debug for coords]`)
