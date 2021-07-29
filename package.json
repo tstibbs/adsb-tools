@@ -1,0 +1,7 @@
+{
+	"type": "module",
+	"dependencies": {
+		"underscore": "^1.13.1",
+		"wtf_wikipedia": "git+https://tstibbs@github.com/spencermountain/wtf_wikipedia.git"
+	}
+}
