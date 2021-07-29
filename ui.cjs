@@ -1,12 +1,22 @@
 //load with e.g. jQuery.getScript('http://127.0.0.1:8080/ui.cjs?latMin=123&latMax=456&lonMin=789&lonMax=012') - use params to define bounding box, when something enters the box, you'll be notified.
 
+function getParam(name) {
+	let param = searchParams.get(name)
+	if (param == null) {
+		return null
+	} else {
+		return parseFloat(param)
+	}
+}
+
 const searchParams = new URLSearchParams(document.currentScript.src.split('?').slice(1).join('?')) //split+join is to get everything after the first question mark
-const latMin = searchParams.get('latMin')
-const latMax = searchParams.get('latMax')
-const lonMin = searchParams.get('lonMin')
-const lonMax = searchParams.get('lonMax')
-const maxHeight = searchParams.get('maxHeight')//measured in feet
-console.log({latMin, latMax, lonMin, lonMax})
+const latMin = getParam('latMin', )
+const latMax = getParam('latMax')
+const lonMin = getParam('lonMin')
+const lonMax = getParam('lonMax')
+const maxHeight = getParam('maxHeight')//measured in feet
+const direction = getParam('direction')//degrees
+console.log({latMin, latMax, lonMin, lonMax, maxHeight, direction})
 
 Notification.requestPermission().then((result) => {
 	console.log(`Notification permission: ${result}`)
@@ -16,6 +26,7 @@ oldWqi = wqi
 const dataFetchIntervalPointer = setInterval(fetchData, 30*1000)//means it will be fetched even if we are off the screen
 
 const seenHexes = []
+const craftPoints = {}
 wqi = async function(...args) {
 	oldWqi(...args)
 	let result = args[0]
@@ -33,15 +44,31 @@ wqi = async function(...args) {
 	crafts = crafts.filter(craft =>
 		craft.lat > latMin && craft.lat < latMax && craft.lon > lonMin && craft.lon < lonMax
 	)
+	crafts = crafts.filter(craft =>
+		!seenHexes.includes(craft.hex)
+	)
 	if (maxHeight != null) {
 		crafts = crafts.filter(craft =>
 			craft.height <= maxHeight
 		)
 	}
-	//TODO add direction and hight filtering
-	crafts = crafts.filter(craft =>
-		!seenHexes.includes(craft.hex)
-	)
+	if (crafts.length > 0 && direction != null) {
+		//store first point that we see this craft at
+		//then as soon as we get a second point, calculate the bearing
+		//if non-matching, ignore for now, but store the new point
+		//repeat, in case it turns onto the right track
+		crafts = crafts.filter(craft => {
+			const previous = craftPoints[craft.hex]
+			const current = {lat: craft.lat, lon: craft.lon}
+			craftPoints[craft.hex] = current
+			if (previous == undefined) {
+				return false//filter out for now, filtering out here doesn't add to seenHexes so it will still be evaluated in the next run
+			} else {
+				let bearing = calculateBearing(previous, current)
+				return bearingCloseEnough(direction, bearing)
+			}
+		})
+	}
 	if (crafts.length > 0) {
 		seenHexes.push.apply(seenHexes, crafts.map(craft => craft.hex))
 		crafts.forEach(processNewCraft)//no need to wait for this, might as well fire them off in parallel
@@ -249,6 +276,35 @@ async function fetchTraces(hex) {
 	let [recent, historic] = await Promise.all([req1, req2])
 	let desc = recent.desc
 	return {historic, recent, desc}
+}
+
+function calculateBearing(point1, point2) {
+	const lat1 = point1.lat
+	const lon1 = point1.lon
+	const lat2 = point2.lat
+	const lon2 = point2.lon
+	//following code borrowed from https://www.movable-type.co.uk/scripts/latlong.html
+	const y = Math.sin(lon2 - lon1) * Math.cos(lat2)
+	const x = (Math.cos(lat1) * Math.sin(lat2)) - (Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1))
+	const rawAngle = Math.atan2(y, x)
+	const bearing = (((rawAngle * 180) / Math.PI) + 360) % 360 // in degrees
+	return bearing
+}
+
+function bearingCloseEnough(expected, actual) {
+	const variance = 20 //i.e. this much either way is allowed, so total range will be twice this value
+	const min = expected - variance
+	const max = expected + variance
+
+	if (min >= 0 && max <= 360) {
+		return actual >= min && actual <= max
+	} else if (min < 0 && max <= 360) {
+		return actual >= (min + 360) || actual <= max
+	} else if (min >= 0 && max > 360) {
+		return actual >= min || actual <= (max - 360)
+	} else {//if (min < 0 && max > 360)
+		throw new Error(`Something went wrong: ${JSON.stringify({expected, actual, variance, min, max})}`)
+	}
 }
 
 //for easy re-use in local testing
