@@ -221,15 +221,15 @@ async function geocode(lat, lon) {
 		cityName = city.tags['name:en'] || city.tags.name
 	}
 	if (airportName == null) {
-		airportName = 'Unknown'
+		console.debug(`airportName == null`)
 	}
 	if (cityName == null) {
-		cityName = 'Unknown'
+		console.debug(`cityName == null`)
 	}
 	if (countryName == null) {
-		countryName = 'Unknown'
+		console.debug(`countryName == null`)
 	}
-	return `${airportName}, ${cityName}, ${countryName}`
+	return [airportName, cityName, countryName].filter(name => name != null).join(', ')
 	//test data:
 	// 51.4703,-0.4737 -> heathrow
 	// 34.88398,33.63031 -> Larnaca International Airport, Cyprus
