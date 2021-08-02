@@ -1,5 +1,14 @@
 //load with e.g. jQuery.getScript('http://127.0.0.1:8080/ui.cjs?latMin=123&latMax=456&lonMin=789&lonMax=012') - use params to define bounding box, when something enters the box, you'll be notified.
 
+const scriptUrl = new URL(document.currentScript.src)
+const scriptDir = scriptUrl.origin + scriptUrl.pathname.split('/').slice(0, -1).join('/')
+const searchParams = scriptUrl.searchParams
+
+let registrationPrefixes = null
+jQuery.ajax(`${scriptDir}/registrationPrefixes.json`).then(data => {
+	registrationPrefixes = data
+})
+
 function getParam(name) {
 	let param = searchParams.get(name)
 	if (param == null) {
@@ -9,7 +18,6 @@ function getParam(name) {
 	}
 }
 
-const searchParams = new URLSearchParams(document.currentScript.src.split('?').slice(1).join('?')) //split+join is to get everything after the first question mark
 const latMin = getParam('latMin', )
 const latMax = getParam('latMax')
 const lonMin = getParam('lonMin')
@@ -79,11 +87,15 @@ async function processNewCraft(craft) {
 	let data = await fetchTraces(craft.hex)
 	const {historic, recent, desc} = data
 	const startPoint = findStartPoint(historic, recent)
-	const prefix = `${craft.registration}: ${desc} started from`
+	const prefix = `${desc} (${craft.registration}) started from`
 	console.debug(`DEBUG: hex/icao=${craft.hex}, type=${craft.type}, callsign=${craft.flight.trim()}, startPoint=${startPoint.join(',')}`)
 	try {
 		let text = await geocode(startPoint[0], startPoint[1])
 		text = `${prefix} ${text}`
+		let demonym = getDemonymForReg(craft.registration)
+		if (demonym != null) {
+			text = `${demonym} ${text}`
+		}
 		console.log(text)
 		new Notification('ADS-B Exchange', {
 			body: text,
@@ -305,6 +317,27 @@ function bearingCloseEnough(expected, actual) {
 	} else {//if (min < 0 && max > 360)
 		throw new Error(`Something went wrong: ${JSON.stringify({expected, actual, variance, min, max})}`)
 	}
+}
+
+function getDemonymForReg(reg) {
+	//registrations are weirdly overlapping, for example P- and PK- belong to completely different country, but the list we have doesn't (necessarily) specify the hyphen
+	let potentials = Object.entries(registrationPrefixes).filter(([prefix, demonym]) =>
+		reg.startsWith(prefix)
+	).sort(([prefixA, demonymA], [prefixB, demonymB]) =>
+		prefixB.length - prefixA.length
+	)
+	let maxPotentialLength = Math.max(...(potentials.map(([prefix, demonym]) => prefix.length)))
+	//get all the most likely based on being the longest
+	potentials = potentials.filter(([prefix, demonym]) =>
+		prefix.length == maxPotentialLength
+	).map(([prefix, demonym]) =>
+		demonym
+	)
+	if (!reg.includes('-') && reg.startsWith('Z')) {
+		potentials.push("British(?) military")
+	}
+	demonym = potentials.join('/')//combine into a single string for display
+	return demonym
 }
 
 //for easy re-use in local testing
