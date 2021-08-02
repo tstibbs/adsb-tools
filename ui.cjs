@@ -157,8 +157,21 @@ async function geocode(lat, lon) {
 	let airportName = null
 	let cityName = null
 	let elements = result.elements == null ? [] : result.elements.filter(element => element.tags != undefined)
-	country = elements.find(element => element.tags != undefined && element.tags['admin_level'] == "2")
-	if (country != null) {
+	let countries = elements.filter(element => element.tags != undefined && element.tags['admin_level'] == "2")
+	if (countries.length > 0) {
+		//if there are multiple, pick the one with the 'ISO3166-1' tag, otherwise pick the one with the most tags, otherwise just pick whatever's first
+		countries = countries.sort((a, b) => {
+			let aIso = 'ISO3166-1' in a.tags
+			let bIso = 'ISO3166-1' in b.tags
+			if (aIso && !bIso) {
+				return -1;
+			} else if (bIso && !aIso) {
+				return 1;
+			} else {
+				return Object.entries(b.tags).length - Object.entries(a.tags).length //return positive number if you want b to appear before a (i.e. if it is longer)
+			}
+		})
+		let country = countries[0]
 		countryName = country.tags['name:en'] || country.tags.name
 	}
 	// if tags contains aerodrome or "aeroway"="aerodrome" then use this one
