@@ -1,85 +1,81 @@
-//load with e.g. jQuery.getScript('http://127.0.0.1:8080/ui.cjs?latMin=123&latMax=456&lonMin=789&lonMax=012') - use params to define bounding box, when something enters the box, you'll be notified.
-
-const scriptUrl = new URL(document.currentScript.src)
-const scriptDir = scriptUrl.origin + scriptUrl.pathname.split('/').slice(0, -1).join('/')
-const searchParams = scriptUrl.searchParams
-
 let registrationPrefixes = null
-jQuery.ajax(`${scriptDir}/registrationPrefixes.json`).then(data => {
-	registrationPrefixes = data
-})
 
-function getParam(name) {
-	let param = searchParams.get(name)
-	if (param == null) {
-		return null
-	} else {
-		return parseFloat(param)
+//this only needs to be called in the UI, not required for testing
+async function init(mainScriptUrl) {
+	const scriptUrl = new URL(mainScriptUrl)
+	const scriptDir = scriptUrl.origin + scriptUrl.pathname.split('/').slice(0, -1).join('/')
+	const searchParams = scriptUrl.searchParams
+
+	registrationPrefixes = await jQuery.ajax(`${scriptDir}/registrationPrefixes.json`)
+
+	function getParam(name) {
+		let param = searchParams.get(name)
+		if (param == null) {
+			return null
+		} else {
+			return parseFloat(param)
+		}
 	}
-}
 
-const latMin = getParam('latMin', )
-const latMax = getParam('latMax')
-const lonMin = getParam('lonMin')
-const lonMax = getParam('lonMax')
-const maxHeight = getParam('maxHeight')//measured in feet
-const direction = getParam('direction')//degrees
-console.log({latMin, latMax, lonMin, lonMax, maxHeight, direction})
+	const latMin = getParam('latMin')
+	const latMax = getParam('latMax')
+	const lonMin = getParam('lonMin')
+	const lonMax = getParam('lonMax')
+	const maxHeight = getParam('maxHeight')//measured in feet
+	const direction = getParam('direction')//degrees
+	console.log({latMin, latMax, lonMin, lonMax, maxHeight, direction})
 
-Notification.requestPermission().then((result) => {
-	console.log(`Notification permission: ${result}`)
-});
+	const oldWqi = wqi
+	setInterval(fetchData, 30*1000)//means it will be fetched even if we are off the screen
 
-oldWqi = wqi
-const dataFetchIntervalPointer = setInterval(fetchData, 30*1000)//means it will be fetched even if we are off the screen
-
-const seenHexes = []
-const craftPoints = {}
-wqi = async function(...args) {
-	oldWqi(...args)
-	let result = args[0]
-	let crafts = result.aircraft.filter(craft =>
-		craft != undefined && craft.alt_baro != undefined && craft.alt_baro != "ground" && craft.lat != undefined && craft.lon != undefined
-	).map(craft => ({
-		height: craft.alt_baro, //in feet
-		lat: craft.lat,
-		lon: craft.lon,
-		registration: craft.r,
-		flight: craft.flight,
-		type: craft.t,
-		hex: craft.hex
-	}))
-	crafts = crafts.filter(craft =>
-		craft.lat > latMin && craft.lat < latMax && craft.lon > lonMin && craft.lon < lonMax
-	)
-	crafts = crafts.filter(craft =>
-		!seenHexes.includes(craft.hex)
-	)
-	if (maxHeight != null) {
+	const seenHexes = []
+	const craftPoints = {}
+	wqi = async function(...args) {
+		oldWqi(...args)
+		let result = args[0]
+		let crafts = result.aircraft.filter(craft =>
+			craft != undefined && craft.alt_baro != undefined && craft.alt_baro != "ground" && craft.lat != undefined && craft.lon != undefined
+		).map(craft => ({
+			height: craft.alt_baro, //in feet
+			lat: craft.lat,
+			lon: craft.lon,
+			registration: craft.r,
+			flight: craft.flight,
+			type: craft.t,
+			hex: craft.hex
+		}))
 		crafts = crafts.filter(craft =>
-			craft.height <= maxHeight
+			craft.lat > latMin && craft.lat < latMax && craft.lon > lonMin && craft.lon < lonMax
 		)
-	}
-	if (crafts.length > 0 && direction != null) {
-		//store first point that we see this craft at
-		//then as soon as we get a second point, calculate the bearing
-		//if non-matching, ignore for now, but store the new point
-		//repeat, in case it turns onto the right track
-		crafts = crafts.filter(craft => {
-			const previous = craftPoints[craft.hex]
-			const current = {lat: craft.lat, lon: craft.lon}
-			craftPoints[craft.hex] = current
-			if (previous == undefined) {
-				return false//filter out for now, filtering out here doesn't add to seenHexes so it will still be evaluated in the next run
-			} else {
-				let bearing = calculateBearing(previous, current)
-				return bearingCloseEnough(direction, bearing)
-			}
-		})
-	}
-	if (crafts.length > 0) {
-		seenHexes.push.apply(seenHexes, crafts.map(craft => craft.hex))
-		crafts.forEach(processNewCraft)//no need to wait for this, might as well fire them off in parallel
+		crafts = crafts.filter(craft =>
+			!seenHexes.includes(craft.hex)
+		)
+		if (maxHeight != null) {
+			crafts = crafts.filter(craft =>
+				craft.height <= maxHeight
+			)
+		}
+		if (crafts.length > 0 && direction != null) {
+			//store first point that we see this craft at
+			//then as soon as we get a second point, calculate the bearing
+			//if non-matching, ignore for now, but store the new point
+			//repeat, in case it turns onto the right track
+			crafts = crafts.filter(craft => {
+				const previous = craftPoints[craft.hex]
+				const current = {lat: craft.lat, lon: craft.lon}
+				craftPoints[craft.hex] = current
+				if (previous == undefined) {
+					return false//filter out for now, filtering out here doesn't add to seenHexes so it will still be evaluated in the next run
+				} else {
+					let bearing = calculateBearing(previous, current)
+					return bearingCloseEnough(direction, bearing)
+				}
+			})
+		}
+		if (crafts.length > 0) {
+			seenHexes.push.apply(seenHexes, crafts.map(craft => craft.hex))
+			crafts.forEach(processNewCraft)//no need to wait for this, might as well fire them off in parallel
+		}
 	}
 }
 
@@ -208,6 +204,7 @@ async function geocode(lat, lon) {
 		}
 	}
 
+	let city = null
 	if (cityName == null) {
 		city = elements.find(element => element.tags['place'] == 'city');//semi colon to force a new statement evaluation because chrome thinks the array below is indexing into the result of the line above
 		//note administrative levels are ordered like this deliberately - 6 is a county boundary which isn't ideal (too big) but is a decent fallback if we don't find anything at the others
@@ -349,12 +346,11 @@ function getDemonymForReg(reg) {
 	if (!reg.includes('-') && reg.startsWith('Z')) {
 		potentials.push("British(?) military")
 	}
-	demonym = potentials.join('/')//combine into a single string for display
-	return demonym
+	return potentials.join('/')//combine into a single string for display
 }
 
-//for easy re-use in local testing
-uiInjection = {
-	findStartPoint,
-	dataFetchIntervalPointer
+async function setupForTesting(prefixes) {
+	registrationPrefixes = prefixes
 }
+
+export {getDemonymForReg, init, calculateBearing, bearingCloseEnough, setupForTesting}
