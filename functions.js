@@ -229,11 +229,15 @@ node(around:2000,${lat},${lon})->.nearby;
 		if (countryName == null) {
 			console.debug(`countryName == null`)
 		}
-		return [airportName, cityName, countryName].filter(name => name != null).join(', ')
-		//test data:
-		// 51.4703,-0.4737 -> heathrow
-		// 34.88398,33.63031 -> Larnaca International Airport, Cyprus
-		// 51.280746, -0.777569 -> farnborough
+		let results = [airportName, cityName, countryName].filter(name =>
+			name != null
+		).filter((name, i, arr) =>
+			//filter out any entries that are already contained in previous strings
+			arr.slice(0, i).find(previousName =>
+				previousName.includes(name) || name.includes(previousName)
+			) == null
+		).join(', ')
+		return results
 	}
 
 	normalizeTraceStamps(data) {

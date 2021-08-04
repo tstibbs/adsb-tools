@@ -18,6 +18,12 @@ class StubbedFunctions extends Functions {
 }
 const functions = new StubbedFunctions()
 
+
+strictEqual(await functions.geocode(51.4703,-0.4737), 'London Heathrow Airport (LHR), United Kingdom')
+strictEqual(await functions.geocode(34.88398,33.63031), 'Larnaca International Airport (LCA), Cyprus')
+strictEqual(await functions.geocode(51.280746, -0.777569), 'Farnborough Airport (FAB), Rushmoor, United Kingdom')
+
+
 strictEqual(functions.getDemonymForReg('N147QS'), "American")
 strictEqual(functions.getDemonymForReg('N18LS'), "American")
 strictEqual(functions.getDemonymForReg('CS-PHD'), "Portuguese")
