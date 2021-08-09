@@ -1,9 +1,12 @@
 import {promisify} from 'util'
 import {readFile} from 'fs'
+import {dirname} from 'path'
+import {fileURLToPath} from 'url'
 import {strictEqual, ok as assertOk} from 'assert'
 
-const stubQueries = JSON.parse((await promisify(readFile)('tests/queries.json')).toString())
-const stubRegistrationPrefixes = JSON.parse((await promisify(readFile)('registrationPrefixes.json')).toString())
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const stubQueries = JSON.parse((await promisify(readFile)(`${__dirname}/queries.json`)).toString())
+const stubRegistrationPrefixes = JSON.parse((await promisify(readFile)(`${__dirname}/../registrationPrefixes.json`)).toString())
 
 import {Functions} from '../functions.js'
 class StubbedFunctions extends Functions {
