@@ -30,8 +30,19 @@ class Functions {
 		this.direction = getParam('direction')//degrees
 		let {latMin, latMax, lonMin, lonMax, maxHeight, direction} = this
 		console.log({latMin, latMax, lonMin, lonMax, maxHeight, direction})
-		setInterval(fetchData, 30*1000)//means it will be fetched even if we are off the screen
 		globalThis.wqi = this.newWqi.bind(this)
+	}
+
+	startPolling() {
+		this.stopPolling()
+		this.pollingIntervalId = setInterval(globalThis.fetchData, 30*1000)//means it will be fetched even if we are off the screen
+	}
+
+	stopPolling() {
+		if (this.pollingIntervalId != null) {
+			clearInterval(this.pollingIntervalId)
+			this.pollingIntervalId == null
+		}
 	}
 
 	async newWqi(...args) {
