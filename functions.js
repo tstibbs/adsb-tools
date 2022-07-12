@@ -109,30 +109,43 @@ class Functions {
 	}
 
 	async processNewCraft(craft) {
-		let data = await this.fetchTraces(craft.hex)
-		const {historic, recent, desc} = data
-		const craftInfo = `${desc} (${craft.registration})`
 		const unique = `${craft.hex}-${Date.now()}`
-		let notificationResponse = this.showNotification(craftInfo, unique)
-		const startPoint = this.findStartPoint(historic, recent)
-		console.debug(`DEBUG: hex/icao=${craft.hex}, type=${craft.type}, callsign=${craft.flight?.trim()}, startPoint=${startPoint.join(',')}`)
-		try {
-			let text = await this.geocode(startPoint[0], startPoint[1])
-			text = `${craftInfo} started from ${text}`
-			let demonym = this.getDemonymForReg(craft.registration)
-			if (demonym != null) {
-				text = `${demonym} ${text}`
+
+		//post first notification with the minimum details we have
+		let notificationResponse = this.showNotification(`${craft.type} ${craft.flight?.trim()} ${craft.registration}`, unique)
+
+		//now get more details from the trace requests, and update notification with that
+		//kick off trace requests in parallel
+		let recentTracePromise = this.fetchTrace(craft.hex, 'recent')
+		let fullTracePromise = this.fetchTrace(craft.hex, 'full')
+		let recent = await recentTracePromise
+		let description = recent.desc
+		let historic = await fullTracePromise
+		const craftInfo = `${description} (${craft.registration})`
+		if (notificationResponse.closed === false) {//small race condition where the user might have closed the notification after this check
+			notificationResponse = this.showNotification(craftInfo, unique)
+			const startPoint = this.findStartPoint(historic, recent)
+			console.debug(`DEBUG: hex/icao=${craft.hex}, type=${craft.type}, callsign=${craft.flight?.trim()}, startPoint=${startPoint.join(',')}`)
+			try {
+				let text = await this.geocode(startPoint[0], startPoint[1])
+				text = `${craftInfo} started from ${text}`
+				let demonym = this.getDemonymForReg(craft.registration)
+				if (demonym != null) {
+					text = `${demonym} ${text}`
+				}
+				console.log(text)
+				if (notificationResponse.closed === false) {
+					this.showNotification(text, unique) //replace the current notification now we have geocoding info
+				} else {
+					console.log('Not showing third notification as a previous version was closed.')
+				}
+			} catch (e) {
+				console.error(e)
+				console.log(`${craftInfo} [error getting location info, see debug for coords]`)
+				throw e
 			}
-			console.log(text)
-			if (notificationResponse.closed === false) {
-				this.showNotification(text, unique) //replace the current notification now we have geocoding info
-			} else {
-				console.log('Not showing notification as initial version was closed.')
-			}
-		} catch (e) {
-			console.error(e)
-			console.log(`${craftInfo} [error getting location info, see debug for coords]`)
-			throw e
+		} else {
+			console.log('Not showing second notification as a previous version was closed.')
 		}
 	}
 
@@ -317,23 +330,14 @@ node(around:2000,${lat},${lon})->.nearby;
 		return startPoint
 	}
 
-	async fetchTraces(hex) {
+	async fetchTrace(hex, traceType) {//traceType = recent, full
 		hex = hex.toLowerCase()
 
-		let url1 = 'data/traces/'+ hex.slice(-2) + '/trace_recent_' + hex + '.json';
-		let url2 = 'data/traces/'+ hex.slice(-2) + '/trace_full_' + hex + '.json';
+		let url1 = `data/traces/${hex.slice(-2)}/trace_${traceType}_${hex}.json`
 
-		let req1 = jQuery.ajax({ url: url1,
+		return await jQuery.ajax({ url: url1,
 			dataType: 'json'
-		});
-
-		let req2 = jQuery.ajax({ url: url2,
-			dataType: 'json'
-		});
-
-		let [recent, historic] = await Promise.all([req1, req2])
-		let desc = recent.desc
-		return {historic, recent, desc}
+		})
 	}
 
 	calculateBearing(point1, point2) {
