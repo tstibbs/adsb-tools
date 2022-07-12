@@ -93,27 +93,45 @@ class Functions {
 		}
 	}
 
+	showNotification(text, unique) {
+		console.log(unique)
+		let notif = new Notification('ADS-B Exchange', {
+			body: text,
+			requireInteraction: true,
+			renotify: true,
+			tag: unique
+		})
+		let response = {
+			closed: false
+		}
+		notif.addEventListener('close', event => {response.closed = true})
+		return response
+	}
+
 	async processNewCraft(craft) {
 		let data = await this.fetchTraces(craft.hex)
 		const {historic, recent, desc} = data
+		const craftInfo = `${desc} (${craft.registration})`
+		const unique = `${craft.hex}-${Date.now()}`
+		let notificationResponse = this.showNotification(craftInfo, unique)
 		const startPoint = this.findStartPoint(historic, recent)
-		const prefix = `${desc} (${craft.registration}) started from`
-		console.debug(`DEBUG: hex/icao=${craft.hex}, type=${craft.type}, callsign=${craft.flight.trim()}, startPoint=${startPoint.join(',')}`)
+		console.debug(`DEBUG: hex/icao=${craft.hex}, type=${craft.type}, callsign=${craft.flight?.trim()}, startPoint=${startPoint.join(',')}`)
 		try {
 			let text = await this.geocode(startPoint[0], startPoint[1])
-			text = `${prefix} ${text}`
+			text = `${craftInfo} started from ${text}`
 			let demonym = this.getDemonymForReg(craft.registration)
 			if (demonym != null) {
 				text = `${demonym} ${text}`
 			}
 			console.log(text)
-			new Notification('ADS-B Exchange', {
-				body: text,
-				requireInteraction: true
-			})
+			if (notificationResponse.closed === false) {
+				this.showNotification(text, unique) //replace the current notification now we have geocoding info
+			} else {
+				console.log('Not showing notification as initial version was closed.')
+			}
 		} catch (e) {
 			console.error(e)
-			console.log(`${prefix} [error getting location info, see debug for coords]`)
+			console.log(`${craftInfo} [error getting location info, see debug for coords]`)
 			throw e
 		}
 	}
@@ -352,7 +370,7 @@ node(around:2000,${lat},${lon})->.nearby;
 	}
 
 	getDemonymForReg(reg) {
-		//registrations are weirdly overlapping, for example P- and PK- belong to completely different country, but the list we have doesn't (necessarily) specify the hyphen
+		//registrations are weirdly overlapping, for example P- and PK- belong to completely different countries, but the list we have doesn't (necessarily) specify the hyphen
 		let potentials = Object.entries(this.getRegistrationPrefixes()).filter(([prefix, demonym]) =>
 			reg.startsWith(prefix)
 		).sort(([prefixA, demonymA], [prefixB, demonymB]) =>
