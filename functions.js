@@ -1,3 +1,8 @@
+const angleIndicatorLength = 2 * 1000 //in metres
+const directionVariance = 20 //i.e. this much either way is allowed, so total range will be twice this value
+const earthRadius = 6371008.8 //according to openlayers
+const lightBlueCss = '#add8e6'
+
 class Functions {
 	constructor() {
 		this.oldWqi = globalThis.wqi
@@ -32,6 +37,9 @@ class Functions {
 		console.log({latMin, latMax, lonMin, lonMax, maxHeight, direction})
 		globalThis.wqi = this.newWqi.bind(this)
 		this.#drawBoundingBox()
+		if (this.direction != null) {
+			this.#drawAngleIndicator()
+		}
 	}
 
 	startPolling() {
@@ -350,14 +358,13 @@ node(around:2000,${lat},${lon})->.nearby;
 		const y = Math.sin(lon2 - lon1) * Math.cos(lat2)
 		const x = (Math.cos(lat1) * Math.sin(lat2)) - (Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1))
 		const rawAngle = Math.atan2(y, x)
-		const bearing = (((rawAngle * 180) / Math.PI) + 360) % 360 // in degrees
+		const bearing = (this.#radiansToDegrees(rawAngle) + 360) % 360 // in degrees
 		return bearing
 	}
 
 	bearingCloseEnough(expected, actual) {
-		const variance = 20 //i.e. this much either way is allowed, so total range will be twice this value
-		const min = expected - variance
-		const max = expected + variance
+		const min = expected - directionVariance
+		const max = expected + directionVariance
 
 		if (min >= 0 && max <= 360) {
 			return actual >= min && actual <= max
@@ -366,7 +373,7 @@ node(around:2000,${lat},${lon})->.nearby;
 		} else if (min >= 0 && max > 360) {
 			return actual >= min || actual <= (max - 360)
 		} else {//if (min < 0 && max > 360)
-			throw new Error(`Something went wrong: ${JSON.stringify({expected, actual, variance, min, max})}`)
+			throw new Error(`Something went wrong: ${JSON.stringify({expected, actual, directionVariance, min, max})}`)
 		}
 	}
 
@@ -403,7 +410,30 @@ node(around:2000,${lat},${lon})->.nearby;
 			[this.lonMax, this.latMin],
 			[this.lonMin, this.latMin]
 		]
-		
+		this.#addLineString(coords, lightBlueCss, 2)
+	}
+	
+	//draw a visual representation of the angle planes have to be moving at to get alerts
+	#drawAngleIndicator() {
+		let baseOfCone = [this.lonMin, this.latMin]
+		let coneLeft = this.#pointFromPoint(this.lonMin, this.latMin, this.direction - directionVariance)
+		let coneRight = this.#pointFromPoint(this.lonMin, this.latMin, this.direction + directionVariance)
+		this.#addLineString([baseOfCone, coneLeft], lightBlueCss, 2)
+		this.#addLineString([baseOfCone, coneRight], lightBlueCss, 2)
+		this.#addLineString([coneLeft, coneRight], `${lightBlueCss}33`, 1)
+	}
+
+	#pointFromPoint(lon, lat, bearing) {
+		let bearingInRadians = this.#degreesToRadians(bearing)
+		lon = this.#degreesToRadians(lon)
+		lat = this.#degreesToRadians(lat)
+		const lat2 = Math.asin(Math.sin(lat) * Math.cos(angleIndicatorLength / earthRadius) + Math.cos(lat) * Math.sin(angleIndicatorLength / earthRadius) * Math.cos(bearingInRadians))
+		const lon2 = lon + Math.atan2(Math.sin(bearingInRadians) * Math.sin(angleIndicatorLength / earthRadius) * Math.cos(lat), Math.cos(angleIndicatorLength / earthRadius) - Math.sin(lat) * Math.sin(lat2));
+		let point2 = [this.#radiansToDegrees(lon2), this.#radiansToDegrees(lat2)]
+		return point2
+	}
+
+	#addLineString(coords, colour, thickness) {
 		let lineString = new ol.geom.LineString(coords)
 		// transform to EPSG:3857
 		lineString.transform('EPSG:4326', 'EPSG:3857')
@@ -416,8 +446,8 @@ node(around:2000,${lat},${lon})->.nearby;
 		
 		let lineStyle = new ol.style.Style({
 			stroke: new ol.style.Stroke({
-				color: 'lightblue',
-				width: 2
+				color: colour,
+				width: thickness
 			})
 		})
 		
@@ -429,6 +459,14 @@ node(around:2000,${lat},${lon})->.nearby;
 			style: [lineStyle]
 		})
 		OLMap.addLayer(vector)
+	}
+
+	#degreesToRadians(degrees) {
+		return degrees * (Math.PI / 180)
+	}
+	
+	#radiansToDegrees(radians) {
+		return (radians * 180) / Math.PI
 	}
 }
 
