@@ -31,6 +31,7 @@ class Functions {
 		let {latMin, latMax, lonMin, lonMax, maxHeight, direction} = this
 		console.log({latMin, latMax, lonMin, lonMax, maxHeight, direction})
 		globalThis.wqi = this.newWqi.bind(this)
+		this.#drawBoundingBox()
 	}
 
 	startPolling() {
@@ -391,6 +392,43 @@ node(around:2000,${lat},${lon})->.nearby;
 			potentials.push("British(?) military")
 		}
 		return potentials.join('/')//combine into a single string for display
+	}
+
+	//draw a visual representation of the box within which we will get alerts
+	#drawBoundingBox() {
+		let coords = [
+			[this.lonMin, this.latMin],
+			[this.lonMin, this.latMax],
+			[this.lonMax, this.latMax],
+			[this.lonMax, this.latMin],
+			[this.lonMin, this.latMin]
+		]
+		
+		let lineString = new ol.geom.LineString(coords)
+		// transform to EPSG:3857
+		lineString.transform('EPSG:4326', 'EPSG:3857')
+		
+		// create the feature
+		let feature = new ol.Feature({
+			geometry: lineString,
+			name: 'Line'
+		})
+		
+		let lineStyle = new ol.style.Style({
+			stroke: new ol.style.Stroke({
+				color: 'lightblue',
+				width: 2
+			})
+		})
+		
+		let source = new ol.source.Vector({
+			features: [feature]
+		})
+		let vector = new ol.layer.Vector({
+			source: source,
+			style: [lineStyle]
+		})
+		OLMap.addLayer(vector)
 	}
 }
 
