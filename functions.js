@@ -18,7 +18,7 @@ class Functions {
 
 		this.registrationPrefixes = await jQuery.ajax(`${scriptDir}/registrationPrefixes.json`)
 
-		function getParam(name) {
+		function getFloatParam(name) {
 			let param = searchParams.get(name)
 			if (param == null) {
 				return null
@@ -27,12 +27,16 @@ class Functions {
 			}
 		}
 
-		this.latMin = getParam('latMin')
-		this.latMax = getParam('latMax')
-		this.lonMin = getParam('lonMin')
-		this.lonMax = getParam('lonMax')
-		this.maxHeight = getParam('maxHeight')//measured in feet
-		this.direction = getParam('direction')//degrees
+		this.latMin = getFloatParam('latMin')
+		this.latMax = getFloatParam('latMax')
+		this.lonMin = getFloatParam('lonMin')
+		this.lonMax = getFloatParam('lonMax')
+		this.maxHeight = getFloatParam('maxHeight')//measured in feet
+		this.direction = getFloatParam('direction')//degrees
+		this.ignoreTypes = searchParams.get('ignoreTypes')
+		if (this.ignoreTypes != null) {
+			this.ignoreTypes = this.ignoreTypes.split(',').map(type => type.trim())
+		}
 		let {latMin, latMax, lonMin, lonMax, maxHeight, direction} = this
 		console.log({latMin, latMax, lonMin, lonMax, maxHeight, direction})
 		globalThis.wqi = this.newWqi.bind(this)
@@ -74,6 +78,11 @@ class Functions {
 		crafts = crafts.filter(craft =>
 			!this.seenHexes.includes(craft.hex)
 		)
+		if (this.ignoreTypes != null) {
+			crafts = crafts.filter(craft =>
+				!this.ignoreTypes.includes(craft.type)
+			)
+		}
 		if (this.maxHeight != null) {
 			crafts = crafts.filter(craft =>
 				craft.height <= this.maxHeight
