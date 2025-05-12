@@ -111,13 +111,18 @@ class Functions {
 		}
 	}
 
-	showNotification(text, unique) {
+	showNotification(hex, text, unique) {
 		console.log(unique)
 		let notif = new Notification('ADS-B Exchange', {
 			body: text,
 			requireInteraction: true,
 			renotify: true,
 			tag: unique
+		})
+		notif.addEventListener('click', event => {
+			selectPlaneByHex(hex, {})
+			window.focus()
+			notif.close()
 		})
 		let response = {
 			closed: false
@@ -130,7 +135,7 @@ class Functions {
 		const unique = `${craft.hex}-${Date.now()}`
 
 		//post first notification with the minimum details we have
-		let notificationResponse = this.showNotification(`${craft.type} ${craft.flight?.trim()} ${craft.registration}`, unique)
+		let notificationResponse = this.showNotification(craft.hex, `${craft.type} ${craft.flight?.trim()} ${craft.registration}`, unique)
 
 		//now get more details from the trace requests, and update notification with that
 		//kick off trace requests in parallel
@@ -141,7 +146,7 @@ class Functions {
 		let historic = await fullTracePromise
 		const craftInfo = `${description} (${craft.registration})`
 		if (notificationResponse.closed === false) {//small race condition where the user might have closed the notification after this check
-			notificationResponse = this.showNotification(craftInfo, unique)
+			notificationResponse = this.showNotification(craft.hex, craftInfo, unique)
 			const startPoint = this.findStartPoint(historic, recent)
 			console.debug(`DEBUG: hex/icao=${craft.hex}, type=${craft.type}, callsign=${craft.flight?.trim()}, startPoint=${startPoint.join(',')}`)
 			try {
@@ -153,7 +158,7 @@ class Functions {
 				}
 				console.log(text)
 				if (notificationResponse.closed === false) {
-					this.showNotification(text, unique) //replace the current notification now we have geocoding info
+					this.showNotification(craft.hex, text, unique) //replace the current notification now we have geocoding info
 				} else {
 					console.log('Not showing third notification as a previous version was closed.')
 				}
